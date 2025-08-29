@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+*.log
+
+# Bỏ qua tất cả file trong output
+resources/output/*
+
+# Ngoại trừ placeholder để giữ thư mục
+!resources/output/placeholder.txt
