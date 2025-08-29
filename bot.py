@@ -1,86 +1,107 @@
 import os
-import subprocess
+import logging
 import requests
 import zipfile
 from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
+from telegram.ext import Application, CommandHandler, ContextTypes
 
-# ================== CONFIG ==================
-BOT_TOKEN = os.getenv("BOT_TOKEN")  # Railway Config Variables
-RESOURCES_URL = "https://drive.google.com/file/d/1TQOJhgDtQkFeJRGDhmjc9nMgbqefOkOv/view?usp=drivesdk"  # Link Google Drive trực tiếp
-ZIP_FILE = "resources.zip"
-RESOURCE_DIR = "resources"
-OUTPUT_DIR = os.path.join(RESOURCE_DIR, "output")
+# ====== BOT TOKEN (lấy từ Railway Variables hoặc thay trực tiếp nếu muốn) ======
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-# ================== AUTO DOWNLOAD RESOURCES ==================
-if not os.path.exists(RESOURCE_DIR):
-    print("🔽 Downloading resources...")
-    r = requests.get(RESOURCES_URL, stream=True)
-    with open(ZIP_FILE, "wb") as f:
-        for chunk in r.iter_content(chunk_size=8192):
+# ====== LINK GOOGLE DRIVE ZIP (gắn trực tiếp) ======
+RESOURCE_URL = "https://drive.google.com/uc?id=1b24XUdQxh_U8wmGvnSae7YSRRtLMok9I&export=download"
+
+# ================== SETUP LOG ==================
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# ================== TẢI VÀ GIẢI NÉN RESOURCES ==================
+def download_resources():
+    print("📥 Downloading resources...")
+    response = requests.get(RESOURCE_URL, stream=True)
+
+    if response.status_code != 200:
+        raise Exception("❌ Không tải được resources, kiểm tra lại link.")
+
+    with open("resources.zip", "wb") as f:
+        for chunk in response.iter_content(chunk_size=8192):
             f.write(chunk)
 
-    print("📂 Extracting resources...")
-    with zipfile.ZipFile(ZIP_FILE, 'r') as zip_ref:
-        zip_ref.extractall(".")
-    print("✅ Resources ready.")
+    print("📦 Extracting resources...")
+    try:
+        with zipfile.ZipFile("resources.zip", "r") as zip_ref:
+            zip_ref.extractall("resources")
+        print("✅ Resources extracted thành công.")
+    except zipfile.BadZipFile:
+        raise Exception("❌ File tải về không phải là ZIP. Kiểm tra lại RESOURCE_URL.")
 
-# Tạo thư mục output nếu chưa có
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-# ================== BOT COMMANDS ==================
+# ================== COMMAND HANDLERS ==================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [["Chạy Tool"], ["Hướng dẫn", "Thông tin"]]
+    keyboard = [
+        ["/userid", "/choose"],
+        ["/danhsachdachon", "/chaymod"],
+        ["/layfile", "/chucnangthem"],
+        ["/checkvip", "/timkiemskin"],
+        ["/deleteskin"]
+    ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    await update.message.reply_text(
-        "Xin chào! Đây là bot tool AOV 🔥\nChọn chức năng bên dưới:",
-        reply_markup=reply_markup
-    )
+    await update.message.reply_text("🤖 Bot đã sẵn sàng!\nChọn chức năng bên dưới:", reply_markup=reply_markup)
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text.strip()
+async def userid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(f"🆔 ID của bạn: {update.message.from_user.id}")
 
-    if text == "Chạy Tool":
-        await update.message.reply_text("🔄 Đang chạy tool, vui lòng chờ...")
+async def choose(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🎨 Vui lòng nhập tên skin bạn muốn chọn...")
 
-        # Gọi tool gốc
-        process = subprocess.run(
-            ["python3", "lbdxaov.py"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
+async def danhsachdachon(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("📋 Đây là danh sách skin đã chọn (demo).")
 
-        # Gửi log output
-        if process.stdout:
-            await update.message.reply_text(f"✅ Tool hoàn thành:\n{process.stdout[:3500]}")
-        if process.stderr:
-            await update.message.reply_text(f"⚠️ Có lỗi:\n{process.stderr[:3500]}")
+async def chaymod(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("⚙️ Đang tiến hành Auto ModSkin...")
 
-        # Gửi file từ output nếu có
-        files = os.listdir(OUTPUT_DIR)
-        if files:
-            for file in files:
-                file_path = os.path.join(OUTPUT_DIR, file)
-                await update.message.reply_document(open(file_path, "rb"))
-        else:
-            await update.message.reply_text("⚠️ Không tìm thấy file output nào!")
-
-    elif text == "Hướng dẫn":
-        await update.message.reply_text("📘 Hướng dẫn:\n1. Nhấn 'Chạy Tool'\n2. Nhập tài khoản & mật khẩu\n3. Nhận file kết quả")
-
-    elif text == "Thông tin":
-        await update.message.reply_text("🤖 Bot Tool AOV by Railway\nLiên hệ admin để biết thêm chi tiết.")
-
+async def layfile(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    file_path = "output/result.txt"  # ví dụ file tool tạo
+    if os.path.exists(file_path):
+        await update.message.reply_document(document=open(file_path, "rb"))
     else:
-        await update.message.reply_text("❓ Không hiểu lệnh, vui lòng chọn trong menu.")
+        await update.message.reply_text("❌ Chưa có file kết quả.")
+
+async def chucnangthem(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🔧 Chức năng: Cam xa, HD Skill, PersonalButton (demo).")
+
+async def checkvip(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("💎 Bạn chưa có VIP (demo).")
+
+async def timkiemskin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🔍 Nhập tên skin để tìm...")
+
+async def deleteskin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🗑️ Skin đã xóa thành công (demo).")
 
 # ================== MAIN ==================
 def main():
-    app = Application.builder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.run_polling()
+    # Tải resource (bỏ qua bước VPN + Enter)
+    download_resources()
+
+    application = Application.builder().token(BOT_TOKEN).build()
+
+    # Register command
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("userid", userid))
+    application.add_handler(CommandHandler("choose", choose))
+    application.add_handler(CommandHandler("danhsachdachon", danhsachdachon))
+    application.add_handler(CommandHandler("chaymod", chaymod))
+    application.add_handler(CommandHandler("layfile", layfile))
+    application.add_handler(CommandHandler("chucnangthem", chucnangthem))
+    application.add_handler(CommandHandler("checkvip", checkvip))
+    application.add_handler(CommandHandler("timkiemskin", timkiemskin))
+    application.add_handler(CommandHandler("deleteskin", deleteskin))
+
+    # Chạy bot
+    application.run_polling()
 
 if __name__ == "__main__":
     main()
